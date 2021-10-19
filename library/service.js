@@ -2,17 +2,44 @@ const chalk = require('chalk');
 const axios = require('axios');
 var {prompt} = require('inquirer');
 const ui = require('cliui')()
-var exchangeRate = 65015;
+let exchangeRate = 62500.2515500;
 let adminBalance = 100;
 let adminUSDBalance = 0;
 let userBTCBlance = 0;
 let userBalance = 5000000;
-
+let isServerRestart  = true;
 let history = [];
-let buyers ={}
-let sellers =[];
+let buyers = []
+let sellers = [];
 let x,y = 1;
 
+//Matching Service
+let matchingServce = ()=> {
+    let sample = .50*Math.round(exchangeRate);
+    let minRange = exchangeRate-sample;
+    let maxRange = exchangeRate+sample;
+    let expectedBuyerPrice, expectedSellerPrice,tempSeller,tempBuyer,tempUSD,tempQuantity;
+    for(let m in sellers){
+        for(let n in buyers ){
+            expectedSellerPrice = sellers[m].value;
+            expectedBuyerPrice = buyers[n].value;
+            if(expectedSellerPrice == expectedBuyerPrice && expectedSellerPrice >= minRange && expectedSellerPrice <= maxRange){
+                console.log("Matched")
+                tempSeller = sellers[m];
+                tempBuyer = buyers[n];
+                tempUSD = tempSeller.value;
+                tempQuantity = tempSeller.quantity
+                sellers.splice(m, 1);
+                buyers.splice(n, 1);
+                updateBalance(tempUSD);
+                updateHistory("sell",true,tempUSD, tempQuantity)
+                updateHistory("buy",true,tempUSD, tempQuantity)
+                displaytable();
+            }
+        }
+    }
+}
+// Get Exchange Rate from Api
 let getExchangeRate = () => {
     let endPoint = 'https://api.binance.com/api/v3/avgPrice'
     axios({
@@ -24,11 +51,14 @@ let getExchangeRate = () => {
         responseType: 'json'
       }).then(
         res => {
-            return exchangeRate = res.data.price;
+            exchangeRate = res.data.price;
+            exchangeRate = Math.round(exchangeRate * 10000000) / 10000000
         }).catch(
             err => console.log(err)
         )
 }
+
+    
 let usdToBtcConverter = (usd) =>{
     let usdValue = usd/exchangeRate;
     return usdValue
@@ -55,42 +85,18 @@ let updateHistory = (role,matched,value,quantity)=>{
     history.push({details,description});
     
 }
-let match = (price,array,cb)=>{
-    let temp = {}
-    for(let item in array){
-        if(price==JSON.stringify(array[item].value)){
-            temp = array[item];
-            array.splice(item, 1);
-            let value = temp.value;
-            let quantity = temp.quantity;
-            
-            updateBalance(value);
-            cb(true,value,quantity)
-        }else {
-            cb(false,null,null)
-        }
-    }
-}
+
 let sell = (quantity, value) =>{
     y++;
     sellers.push({y,quantity,value});
-    updateHistory("sell",false,value, quantity) 
-    match(value,buyers,(matched,value,quantity)=>{
-        if(matched){
-            updateHistory("sell",true,value, quantity)
-        }
-    })
-     
+    updateHistory("sell",false,value, quantity);
+    matchingServce();
 }
 let buy = (quantity, value) =>{
-    buyers +={x,quantity,value};
+    buyers.push({x,quantity,value});
     x++;
-    updateHistory("buy",false,value, quantity) 
-    match(value,sellers,(matched,value,quantity)=>{
-        if(matched){
-            updateHistory("buy",true,value, quantity)
-        }
-    })
+    updateHistory("buy",false,value, quantity);
+    matchingServce();
 }  
 
 let displaytable =()=>{
@@ -186,7 +192,7 @@ let takeInput = () => {
         {
         name : 'option',    
         type: 'number',
-        message : "Want To Buy or Sell  -Enter 1 to buy and 2 to Sell",
+        message : "Want To Buy or Sell  -Enter 1 to buy and 2 to Sell or Enter any other number to refresh the screen or 0 to EXIT",
         }
       ])
       .then((answers) => {
@@ -224,22 +230,31 @@ let takeInput = () => {
                     sell(answers.qua,answers.val)
                     displaytable()
                 })
+        }else if(answers.option == 0){
+            process.exit()
         }else {
-            takeInput();
+            displaytable();
         }
       })
  }
-displaytable()
-
-
-
-
-// Refresh Every 5 min
+ displaytable();
+// Refresh Every 5 sec
 setInterval(() => {
-//On Server Restart
-if(exchangeRate == null){ 
-  getExchangeRate();
-}else{
-    getExchangeRate();
-  }
-}, 10000);
+    //On Server Restart
+    if(isServerRestart == true){ 
+        getExchangeRate();
+        isServerRestart = false;  
+        displaytable();
+    }else{
+        getExchangeRate();
+      }
+    }, 5000);
+// Run Matching Service
+setInterval(()=>{
+    if(isServerRestart == false){
+        matchingServce();
+    }
+},1000)
+
+
+
