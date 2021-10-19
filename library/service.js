@@ -231,7 +231,9 @@ let takeInput = () => {
                     displaytable()
                 })
         }else if(answers.option == 0){
-            process.exit()
+            console.log(chalk.green.bold("Thanks for using our BTC Exchange"))
+            setTimeout(()=>{process.exit()}, 2000);
+            
         }else {
             displaytable();
         }
